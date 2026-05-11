@@ -165,7 +165,7 @@ def fetch_prompt_detail(api_key, brand_id, prompt_id):
     """Fetch full prompt detail including history with sources and entities."""
     time.sleep(3)  # 20 req/min = 3s between calls
     return api_get(api_key, f"/brands/{brand_id}/prompts/{prompt_id}",
-                   params={"include_full_response": "true", "time_range": "30d"})
+                   params={"include_full_response": "true", "time_range": "90d"})
 
 
 # ─── Classification helpers ───────────────────────────────────────────────────
