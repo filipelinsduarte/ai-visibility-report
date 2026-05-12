@@ -2,7 +2,7 @@ name: Build & Deploy AI Visibility Report
 
 on:
   schedule:
-    - cron: '0 6 * * 1'  # Every Monday at 6am UTC
+    - cron: '0 6 * * 1,4'  # Every Monday and Thursday at 6am UTC
   workflow_dispatch:
 
 permissions:
