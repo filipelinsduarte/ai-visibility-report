@@ -550,14 +550,15 @@ function _computeFilteredData(brandKey){
     rp.entries.filter(function(e){return inRange(e.date);}).forEach(function(e){
       (e.comps||[]).forEach(function(name){
         if(!name)return;
-        if(!compData[name])compData[name]={mentions:0,models:{}};
+        if(!compData[name])compData[name]={mentions:0,models:{},modelMentions:{}};
         compData[name].mentions++;compData[name].models[e.model]=true;
+        compData[name].modelMentions[e.model]=(compData[name].modelMentions[e.model]||0)+1;
       });
     });
   });
   var competitors=_dedupeComps(Object.keys(compData).map(function(name){
     var info=compData[name];
-    return {name:name,mentions:info.mentions,avgScore:0,topSentiment:'neutral',models:Object.keys(info.models),summaries:[]};
+    return {name:name,mentions:info.mentions,avgScore:0,topSentiment:'neutral',models:Object.keys(info.models),summaries:[],modelMentions:info.modelMentions};
   }));
 
   /* --- sentiment --- */
