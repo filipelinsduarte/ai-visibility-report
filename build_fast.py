@@ -130,6 +130,15 @@ def load_config(path="config.json"):
             print(f"Error: missing required config key: {key}")
             sys.exit(1)
     cfg.setdefault("llm_api_key", "none")
+
+    # Guard against path traversal in output_file
+    _out = cfg.get("output_file", "report.html")
+    _script_dir = os.path.dirname(os.path.abspath(__file__))
+    _out_abs = os.path.normpath(os.path.join(_script_dir, _out))
+    if not _out_abs.startswith(_script_dir):
+        print(f"Error: output_file path escapes project directory: {_out}")
+        sys.exit(1)
+
     return cfg
 
 
@@ -151,6 +160,11 @@ def api_get(api_key, path, params=None, retries=5):
             else:
                 wait = 60
             print(f"  Rate limited. Waiting {wait}s before retry...")
+            time.sleep(wait)
+            continue
+        elif resp.status_code in (500, 502, 503, 504):
+            wait = 2 * (attempt + 1)
+            print(f"  Warning: server error {resp.status_code}, retrying in {wait}s...")
             time.sleep(wait)
             continue
         resp.raise_for_status()
@@ -188,6 +202,7 @@ def fetch_prompt_detail(api_key, brand_id, prompt_id):
             if wait > 0:
                 time.sleep(wait)
             _last_fetch_time[0] = time.time()
+        # HTTP call is outside the lock but inside the semaphore
         return api_get(api_key, f"/brands/{brand_id}/prompts/{prompt_id}",
                        params={"include_full_response": "true", "time_range": "90d"})
 
@@ -437,15 +452,17 @@ def process_brand_data(api_key, brand_cfg, llm_cfg=None):
         prompt_id = p.get("id") or p.get("promptId")
         try:
             detail = fetch_prompt_detail(api_key, brand_id, prompt_id)
-            details_map[p_idx] = detail
             if (p_idx + 1) % 10 == 0 or p_idx + 1 == len(prompts_raw):
                 print(f"    Fetched {p_idx + 1}/{len(prompts_raw)} prompts...")
+            return p_idx, detail
         except Exception as e:
             print(f"    Warning: could not fetch prompt {prompt_id}: {e}")
-            details_map[p_idx] = p
+            return p_idx, p
 
     with ThreadPoolExecutor(max_workers=4) as executor:
-        list(executor.map(_fetch_one, enumerate(prompts_raw)))
+        for p_idx, detail in executor.map(_fetch_one, enumerate(prompts_raw)):
+            if detail is not None:
+                details_map[p_idx] = detail
 
     print(f"  Processing {len(prompts_raw)} prompt details...")
     for p_idx, p in enumerate(prompts_raw):
@@ -632,12 +649,16 @@ def process_brand_data(api_key, brand_cfg, llm_cfg=None):
     domain_type_counts = defaultdict(int)
     content_type_counts = defaultdict(int)
 
+    _url_cache = {}  # url -> (domain, page_type, content_type)
     dcat = {}
     for url, info in url_data.items():
-        domain = extract_domain(url)
+        if url not in _url_cache:
+            domain = extract_domain(url)
+            dt, ct = classify_url(url, domain, info["title"])
+            _url_cache[url] = (domain, dt, ct)
+        domain, dt, ct = _url_cache[url]
         domain_counts[domain] += info["count"]
         dcat[domain] = classify_domain(domain)
-        dt, ct = classify_url(url, domain, info["title"])
         domain_type_counts[dt] += info["count"]
         content_type_counts[ct] += info["count"]
         domain_url_list[domain].append({
@@ -700,8 +721,12 @@ def process_brand_data(api_key, brand_cfg, llm_cfg=None):
         "content_types": defaultdict(int),
     })
     for url, title, model_key in all_citations:
-        domain = extract_domain(url)
-        dt, ct = classify_url(url, domain, title)
+        if url in _url_cache:
+            domain, dt, ct = _url_cache[url]
+        else:
+            domain = extract_domain(url)
+            dt, ct = classify_url(url, domain, title)
+            _url_cache[url] = (domain, dt, ct)
         model_cit[model_key]["total"] += 1
         model_cit[model_key]["domains"][domain] += 1
         model_cit[model_key]["domain_types"][dt] += 1
@@ -921,7 +946,18 @@ def generate_actions(cfg, brand_name, brand_domain, data):
         raw = re.sub(r"^```[a-z]*\n?", "", raw)
         raw = re.sub(r"```$", "", raw).strip()
 
-    return json.loads(raw)
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        # Try stripping markdown code fences if the LLM wrapped the JSON
+        stripped = raw.strip().strip('`')
+        if stripped.startswith('json'):
+            stripped = stripped[4:].strip()
+        try:
+            return json.loads(stripped)
+        except (json.JSONDecodeError, ValueError):
+            print(f"  Warning: could not parse actions JSON, using empty actions")
+            return []
 
 
 # ─── Template injection ───────────────────────────────────────────────────────
@@ -931,7 +967,8 @@ def brand_toggle_html(brands):
     for i, b in enumerate(brands):
         cls = "bt-btn active" if i == 0 else "bt-btn"
         fav_url = f"https://www.google.com/s2/favicons?domain={b['domain']}&sz=32"
-        onclick = f"setBrand('{b['key']}',this)"
+        key_safe = b['key'].replace("'", "\\'")
+        onclick = f"setBrand('{key_safe}',this)"
         parts.append(
             f'<button class="{cls}" onclick="{onclick}">'
             f'<img src="{fav_url}" onerror="this.style.display=\'none\'">{b["name"]}'

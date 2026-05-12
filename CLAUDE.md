@@ -44,7 +44,7 @@ This is the most common entry point. The user has pasted the repo URL into Claud
 
 5. **Run the build:**
    ```bash
-   python3 build.py
+   python3 build_fast.py
    ```
    This takes 5-6 minutes for a 30-prompt brand. Tell the user upfront so they are not surprised. Stream the output so they can see progress.
 
@@ -101,7 +101,7 @@ Brand IDs are UUIDs. There are two ways to find them:
 ## How to run a report
 
 ```bash
-python3 build.py
+python3 build_fast.py
 ```
 
 This will:
@@ -146,19 +146,19 @@ Every domain name, citation count, and competitor mentioned in the actions comes
 
 1. **Always read `config.json` first** to understand which brands are configured, what their IDs are, and what the output file is named.
 
-2. **If the user asks to build a report**, run `python3 build.py`. You can use the `/build-report` slash command for a guided flow.
+2. **If the user asks to build a report**, run `python3 build_fast.py`. You can use the `/build-report` slash command for a guided flow.
 
 3. **Common errors and fixes:**
 
    | Error | Likely cause | Fix |
    |---|---|---|
-   | `"unknown"` model names everywhere | Using `entry['model']` instead of `entry['aiModel']` | The field is `aiModel` in history entries — check `build.py` |
+   | `"unknown"` model names everywhere | Using `entry['model']` instead of `entry['aiModel']` | The field is `aiModel` in history entries — check `build_fast.py` |
    | 429 rate limit errors | Too many API requests in a short window | The build script has built-in retry logic; if it persists, increase sleep intervals |
    | Missing API key errors | Placeholder values still in `config.json` | Ask the user to replace `pk_YOUR_KEY_HERE` and set `llm_provider` + `llm_api_key` |
    | Empty citation data | `include_full_response=true` not passed | Verify the prompt detail endpoint includes this query param |
    | Brand not found (404) | Wrong brand UUID in config | Re-check the brand ID from the dashboard URL or via `GET /brands` |
 
-4. **If the user wants to customize the report**: Update `config.json` for title and metadata changes. Edit `template.html` for visual/layout changes. Avoid modifying `build.py` unless the user needs to change data processing logic.
+4. **If the user wants to customize the report**: Update `config.json` for title and metadata changes. Edit `template.html` for visual/layout changes. Avoid modifying `build_fast.py` unless the user needs to change data processing logic.
 
 5. **If the user wants to deploy**, help them push to GitHub Pages (see section below).
 
@@ -179,7 +179,7 @@ Every `render*()` function must respond to both. The pattern:
 
 ### RAW_HISTORY
 
-`build.py` injects `const RAW_HISTORY=%%RAW_HISTORY%%;` — per-brand, per-prompt, per-entry raw history. Structure:
+`build_fast.py` injects `const RAW_HISTORY=%%RAW_HISTORY%%;` — per-brand, per-prompt, per-entry raw history. Structure:
 
 ```js
 RAW_HISTORY = {
@@ -205,7 +205,7 @@ RAW_HISTORY = {
 }
 ```
 
-`_buildPromptComps(bk)` and `_buildCompCits(bk)` compute their results directly from `RAW_HISTORY`, applying date filtering in-place. Unlike Vitaldin (which had pre-computed `PROMPT_COMPS`/`COMP_CITS` injected from build.py), this report computes everything client-side.
+`_buildPromptComps(bk)` and `_buildCompCits(bk)` compute their results directly from `RAW_HISTORY`, applying date filtering in-place. Unlike Vitaldin (which had pre-computed `PROMPT_COMPS`/`COMP_CITS` injected from build_fast.py), this report computes everything client-side.
 
 ### CRITICAL: brand key naming distinction
 
@@ -222,9 +222,9 @@ Calling `_getCompCits(bk)` or `RAW_HISTORY[bk]` with the capitalized key always 
 
 ## Competitor deduplication
 
-Both build.py and template.html deduplicate competitors independently:
+Both build_fast.py and template.html deduplicate competitors independently:
 
-**build.py** (`normalize_comp_name(name)`): strips domain TLDs, " AI" suffix — runs at build time. `name_to_canonical` maps every variant to its canonical form. `all_entities` is remapped to canonical names before `comp_data` aggregation, so `competitors_out` entries are already merged with correct `modelMentions` counts.
+**build_fast.py** (`normalize_comp_name(name)`): strips domain TLDs, " AI" suffix — runs at build time. `name_to_canonical` maps every variant to its canonical form. `all_entities` is remapped to canonical names before `comp_data` aggregation, so `competitors_out` entries are already merged with correct `modelMentions` counts.
 
 **JS** (`_normComp(name)`, `_dedupeComps(arr)`): client-side dedup for display lists. Run on `D.competitors[bk]` whenever competitors are rendered (competitor tab, citations dropdown, prompts icons).
 
@@ -508,7 +508,7 @@ model_name = entry['aiModel']
 model_name = entry['model']
 ```
 
-If you see "unknown" as the model name everywhere in a report, this is the cause. The `build.py` script handles this correctly, but keep it in mind if you are debugging or extending the data processing code.
+If you see "unknown" as the model name everywhere in a report, this is the cause. The `build_fast.py` script handles this correctly, but keep it in mind if you are debugging or extending the data processing code.
 
 ---
 
@@ -516,7 +516,7 @@ If you see "unknown" as the model name everywhere in a report, this is the cause
 
 | File | Purpose |
 |---|---|
-| `build.py` | Main pipeline: fetch data, process, generate actions, write HTML |
+| `build_fast.py` | Main pipeline: fetch data, process, generate actions, write HTML |
 | `template.html` | Dashboard template with `%%PLACEHOLDER%%` markers |
 | `config.json` | User's local config (gitignored) |
 | `config.example.json` | Example config committed to the repo |

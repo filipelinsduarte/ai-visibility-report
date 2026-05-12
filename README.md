@@ -65,7 +65,7 @@ Multi-brand configs produce a toggled comparison view so agencies can present mu
 
 4. Run the build:
    ```bash
-   python3 build.py
+   python3 build_fast.py
    ```
 
 5. Open the report in your browser:
