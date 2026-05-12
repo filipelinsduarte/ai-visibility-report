@@ -343,6 +343,7 @@ tr.dom-row-open .dom-chev{transform:rotate(180deg)}
         <th class="pt-sort" onclick="setSortCol('sentiment')" id="th-sentiment">Sentiment<span class="sort-arr" id="sa-sentiment">&#8597;</span></th>
         <th>Models</th>
         <th class="pt-sort" onclick="setSortCol('competitors')" id="th-competitors">Top Competitors<span class="sort-arr" id="sa-competitors">&#8597;</span></th>
+        <th>Top Citations</th>
       </tr></thead><tbody id="promptsTbody"></tbody></table>
     </div>
   </div>
@@ -924,6 +925,7 @@ function sortPrompts(arr){
 /* prompts */
 var _pd=[];
 var _promptComps={};
+var _promptCits={};
 function _buildPromptComps(bk){
   var rh=RAW_HISTORY[bk];if(!rh)return;
   var runDates=rh.runDates||[];
@@ -953,8 +955,37 @@ function _buildPromptComps(bk){
   });
   _promptComps=result;
 }
+function _buildPromptCitations(bk){
+  var rh=RAW_HISTORY[bk];if(!rh)return;
+  var runDates=rh.runDates||[];var maxDate=runDates.length?runDates[runDates.length-1]:null;
+  var cutoffDate=null,lastRunOnly=false,customEndPct=null;
+  if(currentTimeRange==='last-run'){lastRunOnly=true;}
+  else if(currentTimeRange==='last-7'&&maxDate){cutoffDate=_daysBack(maxDate,7);}
+  else if(currentTimeRange==='last-14'&&maxDate){cutoffDate=_daysBack(maxDate,14);}
+  else if(currentTimeRange==='last-20'&&maxDate){cutoffDate=_daysBack(maxDate,20);}
+  else if(currentTimeRange==='custom'&&customStartDate&&customEndDate){cutoffDate=customStartDate;customEndPct=customEndDate;}
+  function pctInRange(date){if(!date)return true;if(lastRunOnly)return date===maxDate;if(customEndPct)return date>=cutoffDate&&date<=customEndPct;if(cutoffDate)return date>=cutoffDate;return true;}
+  var result={};
+  (rh.prompts||[]).forEach(function(rp){
+    var pid=rp.id;var allCounts={};var modelCounts={};
+    (rp.entries||[]).filter(function(e){return pctInRange(e.date);}).forEach(function(e){
+      var mk=e.model;
+      (e.srcs||[]).forEach(function(src){
+        if(!src.u)return;
+        var domain=_extractDomainJS(src.u);if(!domain)return;
+        allCounts[domain]=(allCounts[domain]||0)+1;
+        if(!modelCounts[mk])modelCounts[mk]={};
+        modelCounts[mk][domain]=(modelCounts[mk][domain]||0)+1;
+      });
+    });
+    var toSorted=function(obj){return Object.keys(obj).map(function(d){return{domain:d,count:obj[d]};}).sort(function(a,b){return b.count-a.count;});};
+    result[pid]={all:toSorted(allCounts)};
+    Object.keys(modelCounts).forEach(function(mk){result[pid][mk]=toSorted(modelCounts[mk]);});
+  });
+  _promptCits=result;
+}
 function renderPrompts(){
-  var bk=BRAND_CFG[currentBrand].key;_pd=D.prompts[bk];_buildPromptComps(currentBrand);
+  var bk=BRAND_CFG[currentBrand].key;_pd=D.prompts[bk];_buildPromptComps(currentBrand);_buildPromptCitations(currentBrand);
   document.getElementById('promptsSub').textContent=_pd.length+' prompts tracked · '+(activeModel==='all'?'all models':(MODEL_META[activeModel]||{label:activeModel}).label);
   searchQuery=document.getElementById('promptSearch').value;applyPromptFilter();
 }
@@ -973,7 +1004,7 @@ function applyPromptFilter(){
   });
   data=sortPrompts(data);
   var tbody=document.getElementById('promptsTbody');
-  if(!data.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--ink4)">No prompts match filter</td></tr>';return;}
+  if(!data.length){tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--ink4)">No prompts match filter</td></tr>';return;}
   tbody.innerHTML=data.map(function(p){
     /* visibility */
     var visBadge,mentionedModels;
@@ -1043,7 +1074,16 @@ function applyPromptFilter(){
       return '<div class="comp-iw"><img src="'+fav(cd)+'" onerror="this.style.display=\'none\'"><div class="comp-itip">'+tip+'</div></div>';
     }).join('');
     if(!compIcons)compIcons='<span style="color:var(--ink4);font-size:11px">-</span>';
-    return '<tr><td><div class="pt-text">'+p.text+'</div></td><td>'+visBadge+'</td><td>'+posBadge+'</td><td>'+sentBadge+'</td><td><div class="model-dots">'+dots+'</div></td><td><div class="comp-icons">'+compIcons+'</div></td></tr>';
+    /* top citations from _promptCits */
+    var pCitData=_promptCits[p.id];
+    var pCitKey=activeModel==='all'?'all':activeModel;
+    var pCitDomains=(pCitData&&(pCitData[pCitKey]||pCitData['all'])||[]).slice(0,5);
+    var citIcons=pCitDomains.map(function(pc){
+      var tip=pc.domain+(pc.count?' · '+pc.count+' citation'+(pc.count!==1?'s':'')+(activeModel!=='all'?' in '+(MODEL_META[activeModel]||{label:activeModel}).label:''):'');
+      return '<div class="comp-iw"><img src="'+fav(pc.domain)+'" onerror="this.style.display=\'none\'"><div class="comp-itip">'+tip+'</div></div>';
+    }).join('');
+    if(!citIcons)citIcons='<span style="color:var(--ink4);font-size:11px">-</span>';
+    return '<tr><td><div class="pt-text">'+p.text+'</div></td><td>'+visBadge+'</td><td>'+posBadge+'</td><td>'+sentBadge+'</td><td><div class="model-dots">'+dots+'</div></td><td><div class="comp-icons">'+compIcons+'</div></td><td><div class="comp-icons">'+citIcons+'</div></td></tr>';
   }).join('');
 }
 /* sentiment */
