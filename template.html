@@ -443,6 +443,7 @@ function applyCustomRange(){
   errEl.style.display='none';
   customStartDate=start;customEndDate=end;
   currentTimeRange='custom';
+  _compCitsCache={};
   document.querySelectorAll('.tf-btn').forEach(function(x){x.classList.remove('active');});
   document.getElementById('customTfBtn').classList.add('active');
   closeCustomPicker();
@@ -620,6 +621,7 @@ function _applyTimeRange(){
 function setTimeRange(range,btn){
   currentTimeRange=range;
   customStartDate=null;customEndDate=null;
+  _compCitsCache={};
   document.querySelectorAll('.tf-btn').forEach(function(x){x.classList.remove('active');});
   btn.classList.add('active');
   closeCustomPicker();
@@ -652,6 +654,7 @@ function renderOverview(){
     var allD=rh.runDates,maxD=allD[allD.length-1];
     if(currentTimeRange==='last-run'){inRangeDates=[maxD];}
     else if(currentTimeRange==='all'){inRangeDates=allD;}
+    else if(currentTimeRange==='custom'&&customStartDate&&customEndDate){inRangeDates=allD.filter(function(d){return d>=customStartDate&&d<=customEndDate;});}
     else{var ndays={'last-7':7,'last-14':14,'last-20':20}[currentTimeRange];var cutoffD=_daysBack(maxD,ndays);inRangeDates=allD.filter(function(d){return d>=cutoffD;});}
   }
   var isLastRun=(currentTimeRange==='last-run')||inRangeDates.length<=1;
@@ -924,12 +927,13 @@ function _buildPromptComps(bk){
   var rh=RAW_HISTORY[bk];if(!rh)return;
   var runDates=rh.runDates||[];
   var maxDate=runDates.length?runDates[runDates.length-1]:null;
-  var cutoffDate=null,lastRunOnly=false;
+  var cutoffDate=null,lastRunOnly=false,customEndPc=null;
   if(currentTimeRange==='last-run'){lastRunOnly=true;}
   else if(currentTimeRange==='last-7'&&maxDate){cutoffDate=_daysBack(maxDate,7);}
   else if(currentTimeRange==='last-14'&&maxDate){cutoffDate=_daysBack(maxDate,14);}
   else if(currentTimeRange==='last-20'&&maxDate){cutoffDate=_daysBack(maxDate,20);}
-  function pcInRange(date){if(!date)return true;if(lastRunOnly)return date===maxDate;if(cutoffDate)return date>=cutoffDate;return true;}
+  else if(currentTimeRange==='custom'&&customStartDate&&customEndDate){cutoffDate=customStartDate;customEndPc=customEndDate;}
+  function pcInRange(date){if(!date)return true;if(lastRunOnly)return date===maxDate;if(customEndPc)return date>=cutoffDate&&date<=customEndPc;if(cutoffDate)return date>=cutoffDate;return true;}
   var result={};
   (rh.prompts||[]).forEach(function(rp){
     var pid=rp.id;
@@ -1150,10 +1154,19 @@ function toggleCompDomRow(id,domain){
 }
 function _buildCompCits(bk){
   var rh=RAW_HISTORY[bk];if(!rh)return{};
+  // Date range filter matching current time range selection
+  var runDates=rh.runDates||[];var maxDateCc=runDates.length?runDates[runDates.length-1]:null;
+  var ccCutoff=null,ccEnd=null,ccLastRun=false;
+  if(currentTimeRange==='last-run'){ccLastRun=true;}
+  else if(currentTimeRange==='last-7'&&maxDateCc){ccCutoff=_daysBack(maxDateCc,7);}
+  else if(currentTimeRange==='last-14'&&maxDateCc){ccCutoff=_daysBack(maxDateCc,14);}
+  else if(currentTimeRange==='last-20'&&maxDateCc){ccCutoff=_daysBack(maxDateCc,20);}
+  else if(currentTimeRange==='custom'&&customStartDate&&customEndDate){ccCutoff=customStartDate;ccEnd=customEndDate;}
+  function ccInRange(date){if(!date)return true;if(ccLastRun)return date===maxDateCc;if(ccEnd)return date>=ccCutoff&&date<=ccEnd;if(ccCutoff)return date>=ccCutoff;return true;}
   // First pass: collect all citations per normalized comp key
   var normData={};
   (rh.prompts||[]).forEach(function(rp){
-    (rp.entries||[]).forEach(function(e){
+    (rp.entries||[]).filter(function(e){return ccInRange(e.date);}).forEach(function(e){
       if(!e.comps||!e.comps.length||!e.srcs||!e.srcs.length)return;
       e.comps.forEach(function(c){
         var norm=_normComp(c);
