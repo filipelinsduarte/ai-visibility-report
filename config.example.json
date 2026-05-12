@@ -6,6 +6,8 @@
 
   "_llm_other_providers": "Alternatives: 'anthropic' (sk-ant-...), 'openai' (sk-...), 'gemini' (AIza...), 'groq' (gsk_...), 'openrouter' (sk-or-...), 'mistral'. Add llm_api_key when using these.",
 
+  "_ci_comment": "In GitHub Actions, API keys are read from repository secrets (AIPEEKABOO_API_KEY and LLM_API_KEY) via environment variables. You do not need to set aipeekaboo_api_key or llm_api_key in config.json when running in CI.",
+
   "brands": [
     {
       "id": "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
