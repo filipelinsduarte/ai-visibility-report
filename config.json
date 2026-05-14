@@ -1,0 +1,12 @@
+{
+  "brands": [
+    {
+      "id": "32822e91-e6ed-4746-a05f-d0e44c456658",
+      "name": "AI Peekaboo",
+      "key": "aipeekaboo",
+      "domain": "aipeekaboo.com"
+    }
+  ],
+  "report_title": "AI Peekaboo — AI Visibility Report",
+  "output_file": "index.html"
+}
