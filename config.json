@@ -7,6 +7,7 @@
       "domain": "aipeekaboo.com"
     }
   ],
+  "llm_provider": "gemini",
   "report_title": "AI Peekaboo — AI Visibility Report",
   "output_file": "index.html"
 }
