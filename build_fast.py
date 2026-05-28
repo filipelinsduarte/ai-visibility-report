@@ -210,65 +210,272 @@ def fetch_prompt_detail(api_key, brand_id, prompt_id):
 # ─── Classification helpers ───────────────────────────────────────────────────
 
 DOMAIN_CAT_MAP = {
+    # Social
     "reddit.com": "Social Platform",
     "quora.com": "Social Platform",
     "linkedin.com": "Social Platform",
+    "twitter.com": "Social Platform",
+    "x.com": "Social Platform",
+    "facebook.com": "Social Platform",
+    "instagram.com": "Social Platform",
+    "tiktok.com": "Social Platform",
+    "pinterest.com": "Social Platform",
+    # Video
     "youtube.com": "Video Platform",
     "vimeo.com": "Video Platform",
+    "dailymotion.com": "Video Platform",
+    # Reviews
     "g2.com": "Review Site",
     "capterra.com": "Review Site",
     "trustpilot.com": "Review Site",
     "producthunt.com": "Review Site",
+    "yelp.com": "Review Site",
+    "glassdoor.com": "Review Site",
+    "tripadvisor.com": "Review Site",
+    "trustradius.com": "Review Site",
+    "getapp.com": "Review Site",
+    "softwareadvice.com": "Review Site",
+    # Publishing
     "medium.com": "Publishing Platform",
     "substack.com": "Publishing Platform",
+    "wordpress.com": "Publishing Platform",
+    # Developer
     "github.com": "Developer Platform",
+    "stackoverflow.com": "Developer Platform",
+    "dev.to": "Developer Platform",
+    "news.ycombinator.com": "Developer Platform",
+    # eCommerce platforms
     "apps.shopify.com": "eCommerce Platform",
     "shopify.com": "eCommerce Platform",
+    "amazon.com": "eCommerce Platform",
+    "amazon.co.uk": "eCommerce Platform",
+    "etsy.com": "eCommerce Platform",
+    "ebay.com": "eCommerce Platform",
+    # Tech news
+    "techcrunch.com": "Tech News",
+    "wired.com": "Tech News",
+    "theverge.com": "Tech News",
+    "venturebeat.com": "Tech News",
+    # Business news
+    "forbes.com": "Business News",
+    "bloomberg.com": "Business News",
+    "businessinsider.com": "Business News",
+    "wsj.com": "Business News",
+    "ft.com": "Business News",
+    "economist.com": "Business News",
+    # General news
+    "reuters.com": "News",
+    "apnews.com": "News",
+    "bbc.com": "News",
+    "cnn.com": "News",
+    "theguardian.com": "News",
 }
+
+# Sets used for fast domain membership checks in classify_url
+_SOCIAL_DOMAINS = {
+    "reddit.com", "quora.com", "twitter.com", "x.com",
+    "linkedin.com", "facebook.com", "instagram.com", "tiktok.com", "pinterest.com",
+}
+_VIDEO_DOMAINS = {"youtube.com", "vimeo.com", "dailymotion.com"}
+
+# Path segment lists — order within each list is irrelevant; order of the
+# if-elif chain in classify_url determines precedence.
+
+# Product detail pages
+_PRODUCT_SEGS = [
+    "/product/", "/products/", "/produto/", "/productos/", "/produkt/",
+    "/produit/", "/produits/", "/item/", "/items/", "/pd/", "/pdp/",
+    "/buy/", "/shop/product", "/store/product",
+]
+
+# URL path regex for product ID patterns common across e-commerce platforms
+_PRODUCT_PATH_RE = re.compile(
+    r"(?:"
+    r"/p[-_/][a-z0-9]"       # /p-xxx, /p_xxx, /p/xxx  (El Corte Inglés, generic)
+    r"|/-/p-"                 # /-/p-  (Decathlon variant)
+    r"|/_/[a-z]-p-"           # /_/R-p-  (Decathlon variant)
+    r"|/dp/[a-z0-9]{8,}"      # /dp/B08XYZ123  (Amazon ASIN)
+    r"|/ref=[a-z]"            # /ref=sr_  (Amazon)
+    r"|/sku/[a-z0-9]"         # /sku/12345
+    r")",
+    re.IGNORECASE,
+)
+
+# URL query parameter names that confirm a product detail page
+_PRODUCT_QUERY_RE = re.compile(
+    r"[?&](productid|product_id|pid|ean|sku|itemid|item_id|variantid|variant_id)=",
+    re.IGNORECASE,
+)
+
+# Category / collection / browse pages
+_CATEGORY_SEGS = [
+    "/category/", "/categories/", "/categoria/", "/categorias/",
+    "/collection/", "/collections/",
+    "/dept/", "/department/", "/departments/",
+    "/browse/",
+    "/shop/", "/store/",
+    # Sport & apparel retail
+    "/sport/", "/sports/", "/desporto/", "/deporte/", "/esporte/",
+    "/women/", "/men/", "/kids/", "/children/", "/homme/", "/femme/",
+    "/sale/", "/deals/", "/offers/", "/outlet/", "/promo/",
+    # Common taxonomy segments
+    "/clothing/", "/shoes/", "/footwear/", "/accessories/",
+    "/electronics/", "/home/", "/garden/", "/furniture/",
+    "/fitness/", "/outdoor/", "/running/", "/cycling/",
+]
+
+# Editorial / blog content
+_BLOG_SEGS = [
+    "/blog/", "/articles/", "/article/", "/post/", "/posts/",
+    "/editorial/", "/column/", "/columns/",
+    "/insights/", "/resources/", "/resource/",
+    "/learn/", "/education/", "/content/",
+    "/thought-leadership/", "/perspectives/",
+]
+
+# Press / news sections on brand sites
+_NEWS_SEGS = [
+    "/news/", "/press/", "/press-release/", "/press-releases/",
+    "/media/", "/media-center/", "/newsroom/",
+    "/announcement/", "/announcements/",
+]
+
+# Documentation / help centres
+_DOC_SEGS = [
+    "/docs/", "/doc/", "/documentation/",
+    "/help/", "/support/",
+    "/faq/", "/faqs/",
+    "/knowledge-base/", "/kb/",
+    "/manual/", "/getting-started/",
+]
+
+# Pricing pages
+_PRICING_SEGS = ["/pricing", "/plans", "/prices", "/tarifs", "/precos", "/preços"]
+
+# Review / ratings sections
+_REVIEW_SEGS = ["/review/", "/reviews/", "/ratings/", "/testimonials/", "/opinions/", "/avis/"]
 
 
 def classify_domain(domain):
     if domain in DOMAIN_CAT_MAP:
         return DOMAIN_CAT_MAP[domain]
-    if "ai" in domain:
-        return "AI/SaaS Blog"
+    # Partial suffix match (catches subdomains like news.example.com)
+    for known, label in DOMAIN_CAT_MAP.items():
+        if domain.endswith("." + known):
+            return label
+    # .ai TLD — likely an AI/SaaS product (conservative: only exact TLD, not "ai" substring)
+    if domain.endswith(".ai"):
+        return "AI/SaaS"
     return "Industry Blog"
 
 
 def classify_url(url, domain, title=""):
     title = (title or "").lower()
     path = urlparse(url).path.lower()
-    url_lower = url.lower()
+    query = urlparse(url).query.lower()
+    t = title + " " + url.lower()   # combined text used for content_type matching
 
-    # domain_type
-    if any(d in domain for d in ["reddit.com", "quora.com", "twitter.com", "linkedin.com"]):
+    # ── Page type (domain_type) ────────────────────────────────────────────────
+    # Checks run in priority order: specific domains first, then path signals,
+    # then depth-based fallbacks.
+
+    if any(d in domain for d in _SOCIAL_DOMAINS):
         domain_type = "social_media"
-    elif any(d in domain for d in ["youtube.com", "vimeo.com"]):
+
+    elif any(d in domain for d in _VIDEO_DOMAINS):
         domain_type = "video"
-    elif any(seg in path for seg in ["/blog/", "/articles/", "/post/", "/posts/"]):
-        domain_type = "blog_article"
-    elif any(seg in path for seg in ["/docs/", "/help/", "/support/"]):
-        domain_type = "documentation"
-    elif any(seg in path for seg in ["/pricing", "/plans"]):
+
+    # Product detail pages — explicit path segments (highest confidence)
+    elif any(seg in path for seg in _PRODUCT_SEGS):
         domain_type = "product_page"
-    elif path.count("/") <= 2:
+
+    # Product detail pages — URL path ID patterns (e.g. /p-UUID, /-/p-, /dp/ASIN)
+    elif _PRODUCT_PATH_RE.search(path):
+        domain_type = "product_page"
+
+    # Product detail pages — query parameters (e.g. ?productId=, ?ean=)
+    elif _PRODUCT_QUERY_RE.search(query):
+        domain_type = "product_page"
+
+    # Blog / editorial content
+    elif any(seg in path for seg in _BLOG_SEGS):
+        domain_type = "blog_article"
+
+    # Documentation / help
+    elif any(seg in path for seg in _DOC_SEGS):
+        domain_type = "documentation"
+
+    # Pricing pages
+    elif any(seg in path for seg in _PRICING_SEGS):
+        domain_type = "pricing_page"
+
+    # Press / news sections
+    elif any(seg in path for seg in _NEWS_SEGS):
+        domain_type = "news_article"
+
+    # Review / ratings sections
+    elif any(seg in path for seg in _REVIEW_SEGS):
+        domain_type = "review_page"
+
+    # Category / collection pages — after product and editorial checks
+    elif any(seg in path for seg in _CATEGORY_SEGS):
+        domain_type = "category_page"
+
+    # Homepage — root or near-root path
+    elif path in ("/", ""):
         domain_type = "homepage"
+
+    # Shallow paths (≤2 actual segments) with no other signal → section landing
+    elif path.count("/") <= 3:
+        domain_type = "category_page"
+
     else:
         domain_type = "blog_article"
 
-    # content_type
-    if any(kw in title or kw in url_lower for kw in ["vs ", " versus", "comparison", "alternative"]):
+    # ── Content type ───────────────────────────────────────────────────────────
+    # Keyword signals override page-type-based defaults where the title/URL
+    # give a stronger content-type signal.
+
+    if any(kw in t for kw in ["vs ", " versus ", "comparison", " alternative", "alternatives", "compare "]):
         content_type = "comparison"
-    elif any(kw in title or kw in url_lower for kw in ["how to", "guide", "tutorial"]):
+
+    elif any(kw in t for kw in ["how to ", " guide", " tutorial", "step-by-step", "step by step"]):
         content_type = "how_to_guide"
-    elif any(kw in title or kw in url_lower for kw in ["best ", "top ", " tools", " apps"]):
+
+    elif any(kw in t for kw in ["best ", "top ", " tools", " apps", " software", "ranked", "roundup", "top-"]):
         content_type = "listicle_roundup"
+
+    elif any(kw in t for kw in [" review", " reviews", "tested", "hands-on", "hands on", "unboxing", " rating", " ratings"]):
+        content_type = "product_review"
+
+    elif any(kw in t for kw in ["case study", "success story", "customer story", "case-study"]):
+        content_type = "case_study"
+
+    elif any(kw in t for kw in [" report", " study", " survey", " research", " statistics", " stats"]):
+        content_type = "research_report"
+
+    elif any(kw in t for kw in ["press release", "press-release", "announces", "launches", "new launch"]):
+        content_type = "press_release"
+
+    # Fall back to page-type-derived content type
     elif domain_type == "social_media":
         content_type = "forum_thread"
     elif domain_type == "video":
         content_type = "video"
     elif domain_type == "product_page":
         content_type = "product_page"
+    elif domain_type == "category_page":
+        content_type = "category_page"
+    elif domain_type == "news_article":
+        content_type = "news_article"
+    elif domain_type == "review_page":
+        content_type = "product_review"
+    elif domain_type == "pricing_page":
+        content_type = "pricing_page"
+    elif domain_type == "documentation":
+        content_type = "documentation"
+    elif domain_type == "homepage":
+        content_type = "brand_homepage"
     else:
         content_type = "blog_article"
 
