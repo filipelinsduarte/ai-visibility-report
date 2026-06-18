@@ -675,6 +675,7 @@ def process_brand_data(api_key, brand_cfg, llm_cfg=None):
     for p_idx, p in enumerate(prompts_raw):
         prompt_id = p.get("id") or p.get("promptId")
         prompt_text = p.get("promptText") or p.get("text") or ""
+        search_intent = p.get("searchIntent") or ""
 
         detail = details_map.get(p_idx, p)
 
@@ -809,6 +810,7 @@ def process_brand_data(api_key, brand_cfg, llm_cfg=None):
         raw_prompt_history.append({
             "id": prompt_id,
             "text": prompt_text,
+            "intent": search_intent,
             "entries": raw_entries,
         })
 
