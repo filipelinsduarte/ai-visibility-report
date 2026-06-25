@@ -724,13 +724,10 @@ function pickIntent(it,opt){
   _compCitsCache={};
   renderAll();
 }
-/* helper: Set of prompt IDs matching current intentFilter, or null if 'all' */
-function _intentPromptIds(bk){
-  if(intentFilter==='all')return null;
-  var ids=new Set();
-  var rh=RAW_HISTORY[bk];if(!rh)return ids;
-  (rh.prompts||[]).forEach(function(rp){if(String(rp.intent||'').toUpperCase()===intentFilter)ids.add(rp.id);});
-  return ids;
+/* helper: filter D.prompts[bk] by current intentFilter */
+function _filterPdByIntent(pd){
+  if(intentFilter==='all')return pd;
+  return pd.filter(function(p){return String(p.intent||'').toUpperCase()===intentFilter;});
 }
 /* helper: Set of prompt *texts* matching current intentFilter, or null if 'all' */
 function _intentPromptTexts(bk){
@@ -771,8 +768,7 @@ function _destroyCharts(){Object.values(_ovCharts).forEach(function(c){try{c.des
 function renderOverview(){
   _destroyCharts();
   var bk=BRAND_CFG[currentBrand].key;
-  var _oviids=_intentPromptIds(bk);
-  var pd=_oviids?D.prompts[bk].filter(function(p){return _oviids.has(p.id);}):D.prompts[bk];
+  var pd=_filterPdByIntent(D.prompts[bk]);
   var s=D.sentiment[bk];
   var comps=intentFilter!=='all'?_dedupeComps(_buildIntentFilteredComps(bk)):_dedupeComps(D.competitors[bk]);
   var cit=D.citations[bk];
@@ -936,8 +932,7 @@ function renderOverview(){
 /* stats */
 function renderStats(){
   var bk=BRAND_CFG[currentBrand].key,totalRuns=0,mentioned=0;
-  var _iids=_intentPromptIds(bk);
-  var pd=_iids?D.prompts[bk].filter(function(p){return _iids.has(p.id);}):D.prompts[bk];
+  var pd=_filterPdByIntent(D.prompts[bk]);
   pd.forEach(function(p){
     if(activeModel==='all'){totalRuns+=p.totalRuns;mentioned+=p.mentions;}
     else{var mr=p.models[activeModel];if(mr){totalRuns++;if(mr.mentioned)mentioned++;}}
@@ -1342,8 +1337,7 @@ function renderCompetitors(){
   function _dc(c){return activeModel==='all'?c.mentions:(c.modelMentions&&c.modelMentions[activeModel]||0);}
   if(activeModel!=='all')comps=comps.slice().sort(function(a,b){return _dc(b)-_dc(a);});
   var max=comps[0]?_dc(comps[0]):1;if(max===0)max=1;
-  var _cpdiids=_intentPromptIds(bk);
-  var _cpd=_cpdiids?D.prompts[bk].filter(function(p){return _cpdiids.has(p.id);}):D.prompts[bk];
+  var _cpd=_filterPdByIntent(D.prompts[bk]);
   var _brandMentionsComp=activeModel==='all'?_cpd.reduce(function(s,p){return s+(p.mentions||0);},0):_cpd.reduce(function(s,p){return s+((p.models&&p.models[activeModel]&&p.models[activeModel].mentioned)?1:0);},0);
   var _bMentionedPd=_cpd.filter(function(p){return activeModel==='all'?p.mentions>0:(p.models&&p.models[activeModel]&&p.models[activeModel].mentioned);});
   var _brandAvgComp=_bMentionedPd.length?Math.round(_bMentionedPd.reduce(function(s,p){return s+(activeModel==='all'?(p.avgScore||0):((p.models[activeModel]&&p.models[activeModel].score)||0));},0)/_bMentionedPd.length):0;
