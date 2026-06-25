@@ -721,7 +721,43 @@ function pickIntent(it,opt){
   var menu=document.getElementById('intentMenu');
   if(menu){menu.classList.remove('open');}
   _fltDdOpen=null;
-  applyPromptFilter();
+  _compCitsCache={};
+  renderAll();
+}
+/* helper: Set of prompt IDs matching current intentFilter, or null if 'all' */
+function _intentPromptIds(bk){
+  if(intentFilter==='all')return null;
+  var ids=new Set();
+  var rh=RAW_HISTORY[bk];if(!rh)return ids;
+  (rh.prompts||[]).forEach(function(rp){if(String(rp.intent||'').toUpperCase()===intentFilter)ids.add(rp.id);});
+  return ids;
+}
+/* helper: Set of prompt *texts* matching current intentFilter, or null if 'all' */
+function _intentPromptTexts(bk){
+  if(intentFilter==='all')return null;
+  var texts=new Set();
+  var rh=RAW_HISTORY[bk];if(!rh)return texts;
+  (rh.prompts||[]).forEach(function(rp){if(String(rp.intent||'').toUpperCase()===intentFilter)texts.add(rp.text);});
+  return texts;
+}
+/* rebuild competitors from RAW_HISTORY filtered by current intentFilter+model */
+function _buildIntentFilteredComps(bk){
+  var rh=RAW_HISTORY[bk];if(!rh)return[];
+  var compMap={};
+  (rh.prompts||[]).forEach(function(rp){
+    if(intentFilter!=='all'&&String(rp.intent||'').toUpperCase()!==intentFilter)return;
+    (rp.entries||[]).forEach(function(e){
+      if(activeModel!=='all'&&e.model!==activeModel)return;
+      (e.comps||[]).forEach(function(c){
+        if(!c)return;
+        if(!compMap[c])compMap[c]={name:c,mentions:0,models:[],modelMentions:{},topSentiment:'neutral',avgScore:0};
+        compMap[c].mentions++;
+        if(e.model&&compMap[c].models.indexOf(e.model)===-1)compMap[c].models.push(e.model);
+        compMap[c].modelMentions[e.model]=(compMap[c].modelMentions[e.model]||0)+1;
+      });
+    });
+  });
+  return Object.values(compMap).sort(function(a,b){return b.mentions-a.mentions;});
 }
 function switchTab(t,btn){document.querySelectorAll('.stab').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));document.getElementById('panel-'+t).classList.add('active');}
 function renderAll(){renderStats();renderOverview();renderPrompts();renderSentiment();renderCompetitors();renderCitations();renderActionsGrid();}
@@ -735,9 +771,10 @@ function _destroyCharts(){Object.values(_ovCharts).forEach(function(c){try{c.des
 function renderOverview(){
   _destroyCharts();
   var bk=BRAND_CFG[currentBrand].key;
-  var pd=D.prompts[bk];
+  var _oviids=_intentPromptIds(bk);
+  var pd=_oviids?D.prompts[bk].filter(function(p){return _oviids.has(p.id);}):D.prompts[bk];
   var s=D.sentiment[bk];
-  var comps=_dedupeComps(D.competitors[bk]);
+  var comps=intentFilter!=='all'?_dedupeComps(_buildIntentFilteredComps(bk)):_dedupeComps(D.competitors[bk]);
   var cit=D.citations[bk];
   var brandName=BRAND_CFG[currentBrand].name;
 
@@ -758,6 +795,7 @@ function renderOverview(){
   inRangeDates.forEach(function(d){dayTotals[d]=0;dayBrandHits[d]=0;top5comps.forEach(function(c){dayCompHits[c.name][d]=0;});});
   if(rh){
     rh.prompts.forEach(function(rp){
+      if(intentFilter!=='all'&&String(rp.intent||'').toUpperCase()!==intentFilter)return;
       rp.entries.filter(function(e){return inRangeDates.indexOf(e.date)>-1&&(activeModel==='all'||e.model===activeModel);}).forEach(function(e){
         dayTotals[e.date]=(dayTotals[e.date]||0)+1;
         if(e.hit)dayBrandHits[e.date]=(dayBrandHits[e.date]||0)+1;
@@ -897,7 +935,9 @@ function renderOverview(){
 }
 /* stats */
 function renderStats(){
-  var bk=BRAND_CFG[currentBrand].key,pd=D.prompts[bk],totalRuns=0,mentioned=0;
+  var bk=BRAND_CFG[currentBrand].key,totalRuns=0,mentioned=0;
+  var _iids=_intentPromptIds(bk);
+  var pd=_iids?D.prompts[bk].filter(function(p){return _iids.has(p.id);}):D.prompts[bk];
   pd.forEach(function(p){
     if(activeModel==='all'){totalRuns+=p.totalRuns;mentioned+=p.mentions;}
     else{var mr=p.models[activeModel];if(mr){totalRuns++;if(mr.mentioned)mentioned++;}}
@@ -1270,9 +1310,12 @@ function applyPromptFilter(){
 /* sentiment */
 function renderSentiment(){
   var bk=BRAND_CFG[currentBrand].key,s=D.sentiment[bk];
-  var mentions=activeModel==='all'?s.mentions:s.mentions.filter(function(m){return m.model===activeModel;});
+  var _sentIntentTexts=_intentPromptTexts(bk);
+  var mentions=s.mentions;
+  if(_sentIntentTexts)mentions=mentions.filter(function(m){return _sentIntentTexts.has(m.prompt);});
+  if(activeModel!=='all')mentions=mentions.filter(function(m){return m.model===activeModel;});
   var tileCounts;
-  if(activeModel==='all'){
+  if(activeModel==='all'&&intentFilter==='all'){
     tileCounts={positive:s.positive||0,neutral:s.neutral||0,negative:s.negative||0,uncertain:s.uncertain||0};
   } else {
     tileCounts={positive:0,neutral:0,negative:0,uncertain:0};
@@ -1293,12 +1336,14 @@ function renderSentiment(){
 }
 /* competitors */
 function renderCompetitors(){
-  var bk=BRAND_CFG[currentBrand].key,comps=_dedupeComps(D.competitors[bk].slice());
+  var bk=BRAND_CFG[currentBrand].key;
+  var comps=intentFilter!=='all'?_dedupeComps(_buildIntentFilteredComps(bk)):_dedupeComps(D.competitors[bk].slice());
   if(activeModel!=='all')comps=comps.filter(function(c){return c.models&&c.models.indexOf(activeModel)>-1;});
   function _dc(c){return activeModel==='all'?c.mentions:(c.modelMentions&&c.modelMentions[activeModel]||0);}
   if(activeModel!=='all')comps=comps.slice().sort(function(a,b){return _dc(b)-_dc(a);});
   var max=comps[0]?_dc(comps[0]):1;if(max===0)max=1;
-  var _cpd=D.prompts[bk];
+  var _cpdiids=_intentPromptIds(bk);
+  var _cpd=_cpdiids?D.prompts[bk].filter(function(p){return _cpdiids.has(p.id);}):D.prompts[bk];
   var _brandMentionsComp=activeModel==='all'?_cpd.reduce(function(s,p){return s+(p.mentions||0);},0):_cpd.reduce(function(s,p){return s+((p.models&&p.models[activeModel]&&p.models[activeModel].mentioned)?1:0);},0);
   var _bMentionedPd=_cpd.filter(function(p){return activeModel==='all'?p.mentions>0:(p.models&&p.models[activeModel]&&p.models[activeModel].mentioned);});
   var _brandAvgComp=_bMentionedPd.length?Math.round(_bMentionedPd.reduce(function(s,p){return s+(activeModel==='all'?(p.avgScore||0):((p.models[activeModel]&&p.models[activeModel].score)||0));},0)/_bMentionedPd.length):0;
@@ -1396,6 +1441,7 @@ function _buildCompCits(bk){
   // First pass: collect all citations per normalized comp key
   var normData={};
   (rh.prompts||[]).forEach(function(rp){
+    if(intentFilter!=='all'&&String(rp.intent||'').toUpperCase()!==intentFilter)return;
     (rp.entries||[]).filter(function(e){return ccInRange(e.date);}).forEach(function(e){
       if(!e.comps||!e.comps.length||!e.srcs||!e.srcs.length)return;
       e.comps.forEach(function(c){
@@ -1439,6 +1485,7 @@ function _buildBrandCits(bk){
   function inRange(d){if(!d)return true;if(lastRunOnly)return d===maxDate;if(endDate)return d>=cutoff&&d<=endDate;if(cutoff)return d>=cutoff;return true;}
   var urlMap={};
   (rh.prompts||[]).forEach(function(rp){
+    if(intentFilter!=='all'&&String(rp.intent||'').toUpperCase()!==intentFilter)return;
     (rp.entries||[]).forEach(function(e){
       if(!e.hit||!e.srcs||!e.srcs.length)return;
       if(!inRange(e.date))return;
