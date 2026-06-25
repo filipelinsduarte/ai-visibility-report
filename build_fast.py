@@ -817,6 +817,7 @@ def process_brand_data(api_key, brand_cfg, llm_cfg=None):
         prompts_out.append({
             "id": prompt_id,
             "text": prompt_text,
+            "intent": search_intent,
             "avgScore": avg_score,
             "bestScore": best_score,
             "mentions": mentions_count,

@@ -232,6 +232,22 @@ tr.dom-row-open .dom-chev{transform:rotate(180deg)}
 .cit-comp-opt:hover{background:var(--surface2)}
 .cit-comp-opt.active{background:var(--surface2);font-weight:600;color:var(--v)}
 .cit-comp-opt img{width:14px;height:14px;border-radius:3px;flex-shrink:0}
+/* filter dropdowns (model + intent) */
+.flt-dd{position:relative;display:inline-block}
+.flt-trigger{display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:8px;border:1.5px solid var(--border);color:var(--ink2);font-size:12px;font-weight:500;cursor:pointer;transition:all .15s;background:var(--paper);white-space:nowrap;min-width:145px}
+.flt-trigger:hover{border-color:var(--v-bd)}
+.flt-trigger.open{border-color:var(--v);box-shadow:0 0 0 2px var(--v-bg)}
+.flt-trigger img{width:14px;height:14px;border-radius:3px;flex-shrink:0}
+.flt-trigger-label{flex:1;text-align:left}
+.flt-chev{font-size:9px;color:var(--ink4);transition:transform .15s;display:inline-block}
+.flt-trigger.open .flt-chev{transform:rotate(180deg)}
+.flt-menu{position:absolute;top:calc(100% + 5px);left:0;min-width:185px;background:var(--paper);border:1.5px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.13);z-index:400;overflow:hidden;display:none}
+.flt-menu.open{display:block}
+.flt-opt{display:flex;align-items:center;gap:8px;padding:7px 12px;font-size:12px;color:var(--ink2);cursor:pointer;transition:background .1s;white-space:nowrap}
+.flt-opt:hover{background:var(--surface2)}
+.flt-opt.selected{background:var(--v-bg);font-weight:600;color:var(--v-text)}
+.flt-opt img{width:14px;height:14px;border-radius:3px;flex-shrink:0}
+.flt-opt-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
 /* time range filter */
 .time-filter{display:flex;background:var(--surface);border:1px solid var(--border);border-radius:7px;overflow:hidden}
 .tf-btn{padding:5px 11px;font-size:12px;font-weight:500;cursor:pointer;border:none;background:transparent;color:var(--ink3);transition:all .15s;white-space:nowrap}
@@ -288,22 +304,47 @@ tr.dom-row-open .dom-chev{transform:rotate(180deg)}
 </header>
 <div class="model-bar">
   <span class="mb-label">Filter by model</span>
-  <button class="mb-btn active" onclick="setModel('all',this)">All models</button>
-  <button class="mb-btn" onclick="setModel('google-aio',this)">
-    <img src="https://www.google.com/s2/favicons?domain=google.com&sz=32">Google AIO
-  </button>
-  <button class="mb-btn" onclick="setModel('google-ai-mode',this)">
-    <img src="https://www.google.com/s2/favicons?domain=google.com&sz=32">Google AI Mode
-  </button>
-  <button class="mb-btn" onclick="setModel('gemini-2.5-flash',this)">
-    <img src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=32">Gemini
-  </button>
-  <button class="mb-btn" onclick="setModel('sonar',this)">
-    <img src="https://www.google.com/s2/favicons?domain=perplexity.ai&sz=32">Perplexity
-  </button>
-  <button class="mb-btn" onclick="setModel('gpt-4o-mini',this)">
-    <img src="https://www.google.com/s2/favicons?domain=openai.com&sz=32">ChatGPT
-  </button>
+  <div class="flt-dd" id="modelDd">
+    <button class="flt-trigger" id="modelTrigger" onclick="toggleFltDd('modelDd','modelMenu','modelTrigger')">
+      <span class="flt-trigger-label" id="modelTriggerLabel">All models</span>
+      <span class="flt-chev">&#9660;</span>
+    </button>
+    <div class="flt-menu" id="modelMenu">
+      <div class="flt-opt selected" onclick="pickModel('all',this)">All models</div>
+      <div class="flt-opt" onclick="pickModel('google-aio',this)">
+        <img src="https://www.google.com/s2/favicons?domain=google.com&sz=32">Google AIO
+      </div>
+      <div class="flt-opt" onclick="pickModel('google-ai-mode',this)">
+        <img src="https://www.google.com/s2/favicons?domain=google.com&sz=32">Google AI Mode
+      </div>
+      <div class="flt-opt" onclick="pickModel('gemini-2.5-flash',this)">
+        <img src="https://www.google.com/s2/favicons?domain=gemini.google.com&sz=32">Gemini
+      </div>
+      <div class="flt-opt" onclick="pickModel('sonar',this)">
+        <img src="https://www.google.com/s2/favicons?domain=perplexity.ai&sz=32">Perplexity
+      </div>
+      <div class="flt-opt" onclick="pickModel('gpt-4o-mini',this)">
+        <img src="https://www.google.com/s2/favicons?domain=openai.com&sz=32">ChatGPT
+      </div>
+    </div>
+  </div>
+  <span class="mb-label" style="margin-left:10px">Filter by intent</span>
+  <div class="flt-dd" id="intentDd">
+    <button class="flt-trigger" id="intentTrigger" onclick="toggleFltDd('intentDd','intentMenu','intentTrigger')">
+      <span class="flt-trigger-label" id="intentTriggerLabel">All intents</span>
+      <span class="flt-chev">&#9660;</span>
+    </button>
+    <div class="flt-menu" id="intentMenu">
+      <div class="flt-opt selected" onclick="pickIntent('all',this)">All intents</div>
+      <div class="flt-opt" onclick="pickIntent('COMMERCIAL',this)"><span class="flt-opt-dot" style="background:#7c3aed1a;border:1.5px solid #7c3aed"></span>Commercial</div>
+      <div class="flt-opt" onclick="pickIntent('TRANSACTIONAL',this)"><span class="flt-opt-dot" style="background:#16a34a1a;border:1.5px solid #16a34a"></span>Transactional</div>
+      <div class="flt-opt" onclick="pickIntent('INVESTIGATIONAL',this)"><span class="flt-opt-dot" style="background:#2563eb1a;border:1.5px solid #2563eb"></span>Investigational</div>
+      <div class="flt-opt" onclick="pickIntent('INFORMATIONAL',this)"><span class="flt-opt-dot" style="background:#0891b21a;border:1.5px solid #0891b2"></span>Informational</div>
+      <div class="flt-opt" onclick="pickIntent('NAVIGATIONAL',this)"><span class="flt-opt-dot" style="background:#64748b1a;border:1.5px solid #64748b"></span>Navigational</div>
+      <div class="flt-opt" onclick="pickIntent('BRANDED',this)"><span class="flt-opt-dot" style="background:#d974061a;border:1.5px solid #d97406"></span>Branded</div>
+      <div class="flt-opt" onclick="pickIntent('SENTIMENT',this)"><span class="flt-opt-dot" style="background:#db27771a;border:1.5px solid #db2777"></span>Sentiment</div>
+    </div>
+  </div>
 </div>
 <nav class="subnav">
   <div class="sn-inner">
@@ -406,7 +447,7 @@ const ICONS={
   target:'<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3"/><path d="M8 5V2M8 14v-3M5 8H2M14 8h-3"/></svg>'
 };
 const ACTIONS=%%ACTIONS%%;
-let currentBrand='%%DEFAULT_BRAND%%',activeModel='all',promptFilter='all',actFilter='all',searchQuery='';
+let currentBrand='%%DEFAULT_BRAND%%',activeModel='all',promptFilter='all',intentFilter='all',actFilter='all',searchQuery='';
 let sortCol='visibility',sortDir='desc';
 let currentTimeRange='all';
 let customStartDate=null,customEndDate=null;
@@ -629,7 +670,54 @@ function setTimeRange(range,btn){
 }
 
 function setBrand(b,btn){currentBrand=b;sortCol='visibility';sortDir='desc';['prompt','visibility','position','sentiment','competitors'].forEach(function(c){var arr=document.getElementById('sa-'+c);var th=document.getElementById('th-'+c);if(!arr||!th)return;if(c==='visibility'){th.classList.add('sorted');arr.classList.add('sorted');arr.innerHTML='&#8595;';}else{th.classList.remove('sorted');arr.classList.remove('sorted');arr.innerHTML='&#8597;';}});document.querySelectorAll('.bt-btn').forEach(x=>x.classList.remove('active'));btn.classList.add('active');_applyTimeRange();renderAll();}
-function setModel(m,btn){activeModel=m;document.querySelectorAll('.mb-btn').forEach(x=>x.classList.remove('active'));btn.classList.add('active');renderAll();}
+/* ── Filter dropdown helpers ─────────────────────────────────────────────── */
+var _fltDdOpen=null;
+function toggleFltDd(ddId,menuId,triggerId){
+  var menu=document.getElementById(menuId);
+  var trigger=document.getElementById(triggerId);
+  var isOpen=menu.classList.contains('open');
+  if(_fltDdOpen&&_fltDdOpen!==menuId){
+    var prev=document.getElementById(_fltDdOpen);
+    if(prev){prev.classList.remove('open');}
+    var prevTrigger=prev&&prev.previousElementSibling;
+    document.querySelectorAll('.flt-trigger.open').forEach(function(t){t.classList.remove('open');});
+  }
+  if(isOpen){menu.classList.remove('open');trigger.classList.remove('open');_fltDdOpen=null;}
+  else{menu.classList.add('open');trigger.classList.add('open');_fltDdOpen=menuId;}
+}
+document.addEventListener('click',function(e){
+  if(!e.target.closest('.flt-dd')){
+    document.querySelectorAll('.flt-menu.open').forEach(function(m){m.classList.remove('open');});
+    document.querySelectorAll('.flt-trigger.open').forEach(function(t){t.classList.remove('open');});
+    _fltDdOpen=null;
+  }
+});
+function pickModel(m,opt){
+  activeModel=m;
+  document.querySelectorAll('#modelMenu .flt-opt').forEach(function(x){x.classList.remove('selected');});
+  opt.classList.add('selected');
+  var labelEl=document.getElementById('modelTriggerLabel');
+  if(labelEl)labelEl.textContent=opt.textContent.trim();
+  var trigger=document.getElementById('modelTrigger');
+  if(trigger){trigger.classList.remove('open');}
+  var menu=document.getElementById('modelMenu');
+  if(menu){menu.classList.remove('open');}
+  _fltDdOpen=null;
+  renderAll();
+}
+function pickIntent(it,opt){
+  intentFilter=it;
+  document.querySelectorAll('#intentMenu .flt-opt').forEach(function(x){x.classList.remove('selected');});
+  opt.classList.add('selected');
+  var labelEl=document.getElementById('intentTriggerLabel');
+  if(labelEl)labelEl.textContent=opt.textContent.trim();
+  var trigger=document.getElementById('intentTrigger');
+  if(trigger){trigger.classList.remove('open');}
+  var menu=document.getElementById('intentMenu');
+  if(menu){menu.classList.remove('open');}
+  _fltDdOpen=null;
+  applyPromptFilter();
+}
 function switchTab(t,btn){document.querySelectorAll('.stab').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));document.getElementById('panel-'+t).classList.add('active');}
 function renderAll(){renderStats();renderOverview();renderPrompts();renderSentiment();renderCompetitors();renderCitations();renderActionsGrid();}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
@@ -1064,6 +1152,7 @@ function applyPromptFilter(){
     if(activeModel==='all')return !Object.values(p.models).some(function(m){return m&&m.mentioned;});
     return !(p.models[activeModel]&&p.models[activeModel].mentioned);
   });
+  if(intentFilter!=='all')data=data.filter(function(p){return String(p.intent||'').toUpperCase()===intentFilter;});
   data=sortPrompts(data);
   var tbody=document.getElementById('promptsTbody');
   if(!data.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--ink4)">No prompts match filter</td></tr>';return;}
