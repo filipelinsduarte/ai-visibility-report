@@ -69,7 +69,12 @@ def call_llm(provider, api_key, model, system_prompt, user_prompt, base_url=None
     """Call any OpenAI-compatible LLM provider and return the text response."""
     if provider == "claude-cli":
         full_prompt = f"{system_prompt}\n\n{user_prompt}"
-        cmd = ["claude", "-p", "-"]
+        import json as _json, tempfile as _tmp, os as _os
+        _settings_path = "/tmp/empty_settings.json"
+        if not _os.path.exists(_settings_path):
+            with open(_settings_path, "w") as _f:
+                _json.dump({"env": {"ANTHROPIC_API_KEY": ""}}, _f)
+        cmd = ["claude", "-p", "-", "--settings", _settings_path]
         if model:
             cmd += ["--model", model]
         result = subprocess.run(cmd, input=full_prompt, capture_output=True, text=True, check=True)
@@ -493,6 +498,25 @@ def extract_domain(url):
         return url
 
 
+def infer_intent(text):
+    """Rule-based searchIntent inference for prompts where the API returns null.
+    Maps to the same values the template expects: COMMERCIAL, TRANSACTIONAL,
+    INVESTIGATIONAL, INFORMATIONAL, NAVIGATIONAL, BRANDED, SENTIMENT.
+    """
+    t = text.lower()
+    if re.search(r'\b(compar|vs\b|versus|alternat|review|difference between|instead of|better than|pros.and.cons)\b', t):
+        return "INVESTIGATIONAL"
+    if re.search(r'\b(buy|pric(e|ing|ed)|cost|purchas|sign.?up|get.started|free.trial|demo|subscri(be|ption))\b', t):
+        return "TRANSACTIONAL"
+    if re.search(r'\b(login|log.?in|sign.?in|homepage|official.site|download.app)\b', t):
+        return "NAVIGATIONAL"
+    if re.search(r'\b(best|top\s*\d*|leading|recommend|which\s.{1,60}(platform|tool|software|solution|system|service|app)|who\s(offers|provides|has))\b', t):
+        return "COMMERCIAL"
+    if re.search(r'\b(reddit|opinion|reputation|what.do.people|community|forum|feedback|think.of|experience.with)\b', t):
+        return "SENTIMENT"
+    return "INFORMATIONAL"
+
+
 def normalize_comp_name(name):
     """Normalize competitor display name for deduplication (e.g. 'Otterly AI' == 'otterly.ai')."""
     n = name.strip().lower()
@@ -675,7 +699,7 @@ def process_brand_data(api_key, brand_cfg, llm_cfg=None):
     for p_idx, p in enumerate(prompts_raw):
         prompt_id = p.get("id") or p.get("promptId")
         prompt_text = p.get("promptText") or p.get("text") or ""
-        search_intent = p.get("searchIntent") or ""
+        search_intent = p.get("searchIntent") or infer_intent(p.get("promptText") or p.get("text") or "")
 
         detail = details_map.get(p_idx, p)
 
@@ -829,9 +853,10 @@ def process_brand_data(api_key, brand_cfg, llm_cfg=None):
     entities_from_api = len([e for e in all_entities if e[1] == "competitor"])
     llm_comps = []
     if llm_cfg and all_full_responses:
-        print(f"  Running LLM NLP extraction on {len(all_full_responses)} responses...")
+        nlp_sample = all_full_responses[:240]
+        print(f"  Running LLM NLP extraction on {len(nlp_sample)} responses (capped from {len(all_full_responses)})...")
         llm_comps = extract_competitors_llm(
-            all_full_responses,
+            nlp_sample,
             brand_name,
             llm_cfg.get("provider"),
             llm_cfg.get("api_key"),

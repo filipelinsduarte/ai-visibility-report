@@ -733,13 +733,13 @@ function _filterPdByIntent(pd){
 function _intentPromptTexts(bk){
   if(intentFilter==='all')return null;
   var texts=new Set();
-  var rh=RAW_HISTORY[bk];if(!rh)return texts;
+  var rh=RAW_HISTORY[currentBrand];if(!rh)return texts;
   (rh.prompts||[]).forEach(function(rp){if(String(rp.intent||'').toUpperCase()===intentFilter)texts.add(rp.text);});
   return texts;
 }
 /* rebuild competitors from RAW_HISTORY filtered by current intentFilter+model */
 function _buildIntentFilteredComps(bk){
-  var rh=RAW_HISTORY[bk];if(!rh)return[];
+  var rh=RAW_HISTORY[currentBrand];if(!rh)return[];
   var compMap={};
   (rh.prompts||[]).forEach(function(rp){
     if(intentFilter!=='all'&&String(rp.intent||'').toUpperCase()!==intentFilter)return;
