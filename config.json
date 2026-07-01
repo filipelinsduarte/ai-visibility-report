@@ -1,13 +1,14 @@
 {
+  "aipeekaboo_api_key": "pk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "llm_provider": "claude-cli",
   "brands": [
     {
-      "id": "32822e91-e6ed-4746-a05f-d0e44c456658",
-      "name": "AI Peekaboo",
-      "key": "aipeekaboo",
-      "domain": "aipeekaboo.com"
+      "id": "2c398288-2b5e-49cc-9860-641c4cc44a73",
+      "name": "KnewHealth",
+      "key": "knewhealth",
+      "domain": "knewhealth.com"
     }
   ],
-  "llm_provider": "gemini",
-  "report_title": "AI Peekaboo — AI Visibility Report",
-  "output_file": "index.html"
+  "report_title": "KnewHealth — AI Visibility Report",
+  "output_file": "knewhealth-report.html"
 }

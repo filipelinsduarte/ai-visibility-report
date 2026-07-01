@@ -73,7 +73,7 @@ def call_llm(provider, api_key, model, system_prompt, user_prompt, base_url=None
         _settings_path = "/tmp/empty_settings.json"
         if not _os.path.exists(_settings_path):
             with open(_settings_path, "w") as _f:
-                _json.dump({"env": {"ANTHROPIC_API_KEY": ""}}, _f)
+                _json.dump({"env": {"ANTHROPIC_API_KEY": None}}, _f)
         cmd = ["claude", "-p", "-", "--settings", _settings_path]
         if model:
             cmd += ["--model", model]
