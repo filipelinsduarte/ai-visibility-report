@@ -4,6 +4,13 @@ on:
   schedule:
     - cron: '0 6 * * 1,4'  # Every Monday and Thursday at 6am UTC
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'config.json'
+      - 'build_fast.py'
+      - 'template.html'
+      - '.github/workflows/build.yml'
 
 permissions:
   contents: read
