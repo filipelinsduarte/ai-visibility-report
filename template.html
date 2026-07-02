@@ -756,6 +756,33 @@ function _buildIntentFilteredComps(bk){
   });
   return Object.values(compMap).sort(function(a,b){return b.mentions-a.mentions;});
 }
+/* rebuild citation aggregates (domains/page types/content types) from RAW_HISTORY filtered by current intentFilter+model */
+function _buildIntentCitations(bk){
+  var rh=RAW_HISTORY[currentBrand];
+  var fallbackListicles=(D.citations[bk]||{}).topListicles||[];
+  if(!rh)return{total:0,uniqueDomains:0,domainTypes:[],contentTypes:[],topDomains:[],topListicles:fallbackListicles};
+  var domainCounts={},contentCounts={},typeCounts={},total=0;
+  (rh.prompts||[]).forEach(function(rp){
+    if(intentFilter!=='all'&&String(rp.intent||'').toUpperCase()!==intentFilter)return;
+    (rp.entries||[]).forEach(function(e){
+      if(activeModel!=='all'&&e.model!==activeModel)return;
+      (e.srcs||[]).forEach(function(src){
+        if(!src||!src.u)return;
+        var dom;
+        try{dom=new URL(src.u).hostname.replace(/^www\./,'');}catch(err){return;}
+        domainCounts[dom]=(domainCounts[dom]||0)+1;
+        if(src.pt)typeCounts[src.pt]=(typeCounts[src.pt]||0)+1;
+        if(src.ct)contentCounts[src.ct]=(contentCounts[src.ct]||0)+1;
+        total++;
+      });
+    });
+  });
+  var topDomains=Object.keys(domainCounts).map(function(d){return{domain:d,count:domainCounts[d]};}).sort(function(a,b){return b.count-a.count;});
+  var domainTypes=Object.keys(typeCounts).map(function(k){return{type:k,count:typeCounts[k]};}).sort(function(a,b){return b.count-a.count;});
+  var contentTypes=Object.keys(contentCounts).map(function(k){return{type:k,count:contentCounts[k]};}).sort(function(a,b){return b.count-a.count;});
+  return{total:total,uniqueDomains:topDomains.length,domainTypes:domainTypes,contentTypes:contentTypes,topDomains:topDomains,topListicles:fallbackListicles};
+}
+function _intentLabel(it){return it.charAt(0)+it.slice(1).toLowerCase();}
 function switchTab(t,btn){document.querySelectorAll('.stab').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));document.getElementById('panel-'+t).classList.add('active');}
 function renderAll(){renderStats();renderOverview();renderPrompts();renderSentiment();renderCompetitors();renderCitations();renderActionsGrid();}
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
@@ -1497,7 +1524,9 @@ function _barRows(items,total){return items.map(function(x){var pct=total>0?(x.c
 function renderCitations(){
   var bk=BRAND_CFG[currentBrand].key,c;
   /* base citation data */
-  if(activeModel!=='all'&&D.modelCitations&&D.modelCitations[bk]&&D.modelCitations[bk][activeModel]){
+  if(intentFilter!=='all'){
+    c=_buildIntentCitations(bk);
+  } else if(activeModel!=='all'&&D.modelCitations&&D.modelCitations[bk]&&D.modelCitations[bk][activeModel]){
     c=Object.assign({},D.modelCitations[bk][activeModel]);
     c.uniqueDomains=c.topDomains?c.topDomains.length:D.citations[bk].uniqueDomains;
     c.topListicles=D.citations[bk].topListicles;
@@ -1589,7 +1618,7 @@ function renderCitations(){
       '<div class="cc"><div class="cc-head"><div class="cc-title">Page Type</div><div class="cc-sub">'+tdt.toLocaleString()+' total citations</div></div><div class="cc-body">'+dtBars+'</div></div>'+
       '<div class="cc"><div class="cc-head"><div class="cc-title">Content Type</div><div class="cc-sub">how AI sources are classified</div></div><div class="cc-body">'+ctBars+'</div></div>'+
     '</div>'+
-    '<div class="cc"><div class="cc-head"><div class="cc-title">Top 20 Cited Domains</div><div class="cc-sub">'+(c.uniqueDomains||'')+' unique domains'+(activeModel!=='all'?' for '+(MODEL_META[activeModel]||{label:activeModel}).label:'')+'</div></div>'+
+    '<div class="cc"><div class="cc-head"><div class="cc-title">Top 20 Cited Domains</div><div class="cc-sub">'+(c.uniqueDomains||'')+' unique domains'+(activeModel!=='all'?' for '+(MODEL_META[activeModel]||{label:activeModel}).label:'')+(intentFilter!=='all'?' &middot; '+_intentLabel(intentFilter)+' intent':'')+'</div></div>'+
       '<div class="cc-body np"><table class="dom-table"><thead><tr><th>#</th><th>Domain</th><th>Domain Type</th><th style="text-align:right">Citations</th></tr></thead><tbody>'+domRows+'</tbody></table></div>'+
     '</div>'+
     (ltRows?'<div class="cc"><div class="cc-head"><div class="cc-title">Top Listicle Articles</div><div class="cc-sub">highest-priority inclusion targets</div></div><div class="cc-body np"><table class="dom-table"><thead><tr><th>Domain</th><th>Article</th><th style="text-align:right">Cited</th></tr></thead><tbody>'+ltRows+'</tbody></table></div></div>':'');
