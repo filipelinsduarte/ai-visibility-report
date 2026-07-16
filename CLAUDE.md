@@ -207,6 +207,21 @@ RAW_HISTORY = {
 
 `_buildPromptComps(bk)` and `_buildCompCits(bk)` compute their results directly from `RAW_HISTORY`, applying date filtering in-place. Unlike Vitaldin (which had pre-computed `PROMPT_COMPS`/`COMP_CITS` injected from build_fast.py), this report computes everything client-side.
 
+### Intent and topic filters
+
+Two additional filters sit next to the model filter in the sticky bar, both AND-combined with `activeModel` and with each other:
+
+```js
+let intentFilter = 'all';   // 'all' | 'COMMERCIAL' | 'TRANSACTIONAL' | 'INVESTIGATIONAL' | 'INFORMATIONAL' | 'NAVIGATIONAL' | 'BRANDED' | 'SENTIMENT'
+let topicFilter = 'all';    // 'all' | any string from the prompt's `category` field (AI Peekaboo API, open vocabulary)
+```
+
+`intent` comes from the `/brands/:id/prompts` endpoint's `searchIntent` field (fixed enum, falls back to `infer_intent()` when null) and is a fixed dropdown menu. `topic` comes from the same endpoint's `category` field (open vocabulary, e.g. "Sentiment", "Competitor Research", "Lifestyle") — since values vary per brand, the topic dropdown (`#topicMenu`) is rebuilt per-brand at render time by `_rebuildTopicMenu()`, scanning `RAW_HISTORY[currentBrand].prompts` for unique `topic` values. `topicFilter` resets to `'all'` on brand switch (via `setBrand()`) since a topic valid for one brand may not exist for another.
+
+Both `p.intent` and `p.topic` are carried on every prompt object (`D.prompts[bk]`, `RAW_HISTORY[bk].prompts[]`) end to end from `build_fast.py`. The combined predicate `_passesIntentTopic(intent, topic)` is the single source of truth for whether a prompt passes both filters — used by `_filterPdByIntent()` (despite the name, now intent+topic aware), `_intentPromptTexts()`, `_buildIntentFilteredComps()`, `_buildIntentCitations()`, `_buildCompCits()`, `_buildBrandCits()`, and the Overview line-chart date loop. `applyPromptFilter()` (Prompts tab table) filters on both independently rather than through the shared predicate, but is equivalent.
+
+Like the intent filter, the topic filter does NOT affect the Overview tab's citation-derived charts (Page Type / Content Type / Top Domains donut+bars) — those always read `D.citations[bk]` (or `D.modelCitations[bk][activeModel]`) unfiltered by intent/topic. This is a pre-existing limitation of the intent filter, carried forward unchanged for topic rather than silently fixed as part of this change.
+
 ### CRITICAL: brand key naming distinction
 
 Two different casings coexist and must not be confused:
@@ -270,6 +285,8 @@ Object.values(p.models).some(m => m && m.mentioned)
 Do NOT use `p.mentions > 0` — that uses historical run count, not current model state.
 
 **Top Competitors column**: 3 favicon icons for the top competitors for that prompt/model combo, powered by `_promptComps[promptId][modelKey || 'all']`. Hover tooltip shows name + count. Updates with both time range filter and model filter.
+
+**Intent / Topic columns**: plain pill badges via `_intentBadge(p.intent)` and `_topicBadge(p.topic)`, sit between Prompt and Visibility. See "Intent and topic filters" above for where the data comes from and how filtering is wired.
 
 ---
 

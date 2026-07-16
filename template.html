@@ -345,6 +345,16 @@ tr.dom-row-open .dom-chev{transform:rotate(180deg)}
       <div class="flt-opt" onclick="pickIntent('SENTIMENT',this)"><span class="flt-opt-dot" style="background:#db27771a;border:1.5px solid #db2777"></span>Sentiment</div>
     </div>
   </div>
+  <span class="mb-label" style="margin-left:10px">Filter by topic</span>
+  <div class="flt-dd" id="topicDd">
+    <button class="flt-trigger" id="topicTrigger" onclick="toggleFltDd('topicDd','topicMenu','topicTrigger')">
+      <span class="flt-trigger-label" id="topicTriggerLabel">All topics</span>
+      <span class="flt-chev">&#9660;</span>
+    </button>
+    <div class="flt-menu" id="topicMenu">
+      <div class="flt-opt selected" onclick="pickTopic('all',this)">All topics</div>
+    </div>
+  </div>
 </div>
 <nav class="subnav">
   <div class="sn-inner">
@@ -377,6 +387,7 @@ tr.dom-row-open .dom-chev{transform:rotate(180deg)}
         <th style="width:28px"></th>
         <th class="pt-sort" onclick="setSortCol('prompt')" id="th-prompt">Prompt<span class="sort-arr" id="sa-prompt">&#8597;</span></th>
         <th>Intent</th>
+        <th>Topic</th>
         <th class="pt-sort" onclick="setSortCol('visibility')" id="th-visibility">Visibility<span class="sort-arr sorted" id="sa-visibility">&#8595;</span></th>
         <th class="pt-sort" onclick="setSortCol('position')" id="th-position">Avg Position<span class="sort-arr" id="sa-position">&#8597;</span></th>
         <th class="pt-sort" onclick="setSortCol('sentiment')" id="th-sentiment">Sentiment<span class="info-tip" data-tip="Average sentiment of AI responses that mention the brand for this prompt. Positive = spoken about favorably." onclick="event.stopPropagation()" style="margin-left:4px"><svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="7" r="6"/><path d="M7 6v4" stroke-linecap="round"/><circle cx="7" cy="4.5" r=".5" fill="currentColor" stroke="none"/></svg></span><span class="sort-arr" id="sa-sentiment">&#8597;</span></th>
@@ -447,7 +458,7 @@ const ICONS={
   target:'<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="3"/><path d="M8 5V2M8 14v-3M5 8H2M14 8h-3"/></svg>'
 };
 const ACTIONS=%%ACTIONS%%;
-let currentBrand='%%DEFAULT_BRAND%%',activeModel='all',promptFilter='all',intentFilter='all',actFilter='all',searchQuery='';
+let currentBrand='%%DEFAULT_BRAND%%',activeModel='all',promptFilter='all',intentFilter='all',topicFilter='all',actFilter='all',searchQuery='';
 let sortCol='visibility',sortDir='desc';
 let currentTimeRange='all';
 let customStartDate=null,customEndDate=null;
@@ -525,7 +536,7 @@ function _computeFilteredData(brandKey){
       if(e.hit){mentions++;if(e.sc)scores.push(e.sc);}
     });
     var avgScore=scores.length?Math.round(scores.reduce(function(a,b){return a+b;},0)/scores.length*100)/100:0;
-    return {id:rp.id,text:rp.text,avgScore:avgScore,mentions:mentions,totalRuns:totalRuns,models:models,intent:rp.intent||''};
+    return {id:rp.id,text:rp.text,avgScore:avgScore,mentions:mentions,totalRuns:totalRuns,models:models,intent:rp.intent||'',topic:rp.topic||''};
   });
 
   /* --- citations --- */
@@ -669,7 +680,7 @@ function setTimeRange(range,btn){
   renderAll();
 }
 
-function setBrand(b,btn){currentBrand=b;sortCol='visibility';sortDir='desc';['prompt','visibility','position','sentiment','competitors'].forEach(function(c){var arr=document.getElementById('sa-'+c);var th=document.getElementById('th-'+c);if(!arr||!th)return;if(c==='visibility'){th.classList.add('sorted');arr.classList.add('sorted');arr.innerHTML='&#8595;';}else{th.classList.remove('sorted');arr.classList.remove('sorted');arr.innerHTML='&#8597;';}});document.querySelectorAll('.bt-btn').forEach(x=>x.classList.remove('active'));btn.classList.add('active');_applyTimeRange();renderAll();}
+function setBrand(b,btn){currentBrand=b;sortCol='visibility';sortDir='desc';topicFilter='all';['prompt','visibility','position','sentiment','competitors'].forEach(function(c){var arr=document.getElementById('sa-'+c);var th=document.getElementById('th-'+c);if(!arr||!th)return;if(c==='visibility'){th.classList.add('sorted');arr.classList.add('sorted');arr.innerHTML='&#8595;';}else{th.classList.remove('sorted');arr.classList.remove('sorted');arr.innerHTML='&#8597;';}});document.querySelectorAll('.bt-btn').forEach(x=>x.classList.remove('active'));btn.classList.add('active');_compCitsCache={};_rebuildTopicMenu();_applyTimeRange();renderAll();}
 /* ── Filter dropdown helpers ─────────────────────────────────────────────── */
 var _fltDdOpen=null;
 function toggleFltDd(ddId,menuId,triggerId){
@@ -724,17 +735,60 @@ function pickIntent(it,opt){
   _compCitsCache={};
   renderAll();
 }
-/* helper: filter D.prompts[bk] by current intentFilter */
-function _filterPdByIntent(pd){
-  if(intentFilter==='all')return pd;
-  return pd.filter(function(p){return String(p.intent||'').toUpperCase()===intentFilter;});
+/* topic options are per-brand and open-vocabulary (from the AI Peekaboo category field), so the
+   dropdown menu is rebuilt from whatever topics are actually present in the current brand's data */
+function _rebuildTopicMenu(){
+  var rh=RAW_HISTORY[currentBrand];
+  var topics=[],seen={};
+  if(rh&&rh.prompts){
+    rh.prompts.forEach(function(rp){var t=rp.topic;if(t&&!seen[t]){seen[t]=true;topics.push(t);}});
+    topics.sort();
+  }
+  if(topicFilter!=='all'&&topics.indexOf(topicFilter)===-1)topicFilter='all';
+  var menu=document.getElementById('topicMenu');
+  if(!menu)return;
+  var html='<div class="flt-opt'+(topicFilter==='all'?' selected':'')+'" onclick="pickTopic(\'all\',this)">All topics</div>';
+  html+=topics.map(function(t){
+    var esc1=t.replace(/'/g,"\\'").replace(/"/g,'&quot;');
+    return '<div class="flt-opt'+(topicFilter===t?' selected':'')+'" onclick="pickTopic(\''+esc1+'\',this)">'+esc(t)+'</div>';
+  }).join('');
+  menu.innerHTML=html;
+  var labelEl=document.getElementById('topicTriggerLabel');
+  if(labelEl)labelEl.textContent=topicFilter==='all'?'All topics':topicFilter;
+  var trigger=document.getElementById('topicTrigger');
+  if(trigger)trigger.classList.toggle('open',false);
 }
-/* helper: Set of prompt *texts* matching current intentFilter, or null if 'all' */
+function pickTopic(t,opt){
+  topicFilter=t;
+  document.querySelectorAll('#topicMenu .flt-opt').forEach(function(x){x.classList.remove('selected');});
+  if(opt)opt.classList.add('selected');
+  var labelEl=document.getElementById('topicTriggerLabel');
+  if(labelEl)labelEl.textContent=t==='all'?'All topics':t;
+  var trigger=document.getElementById('topicTrigger');
+  if(trigger){trigger.classList.remove('open');}
+  var menu=document.getElementById('topicMenu');
+  if(menu){menu.classList.remove('open');}
+  _fltDdOpen=null;
+  _compCitsCache={};
+  renderAll();
+}
+/* helper: does this prompt (intent + topic) pass the current intent/topic filters? (combined AND) */
+function _passesIntentTopic(intent,topic){
+  if(intentFilter!=='all'&&String(intent||'').toUpperCase()!==intentFilter)return false;
+  if(topicFilter!=='all'&&String(topic||'')!==topicFilter)return false;
+  return true;
+}
+/* helper: filter D.prompts[bk] by current intentFilter + topicFilter */
+function _filterPdByIntent(pd){
+  if(intentFilter==='all'&&topicFilter==='all')return pd;
+  return pd.filter(function(p){return _passesIntentTopic(p.intent,p.topic);});
+}
+/* helper: Set of prompt *texts* matching current intentFilter+topicFilter, or null if both 'all' */
 function _intentPromptTexts(bk){
-  if(intentFilter==='all')return null;
+  if(intentFilter==='all'&&topicFilter==='all')return null;
   var texts=new Set();
   var rh=RAW_HISTORY[currentBrand];if(!rh)return texts;
-  (rh.prompts||[]).forEach(function(rp){if(String(rp.intent||'').toUpperCase()===intentFilter)texts.add(rp.text);});
+  (rh.prompts||[]).forEach(function(rp){if(_passesIntentTopic(rp.intent,rp.topic))texts.add(rp.text);});
   return texts;
 }
 /* rebuild competitors from RAW_HISTORY filtered by current intentFilter+model */
@@ -742,7 +796,7 @@ function _buildIntentFilteredComps(bk){
   var rh=RAW_HISTORY[currentBrand];if(!rh)return[];
   var compMap={};
   (rh.prompts||[]).forEach(function(rp){
-    if(intentFilter!=='all'&&String(rp.intent||'').toUpperCase()!==intentFilter)return;
+    if(!_passesIntentTopic(rp.intent,rp.topic))return;
     (rp.entries||[]).forEach(function(e){
       if(activeModel!=='all'&&e.model!==activeModel)return;
       (e.comps||[]).forEach(function(c){
@@ -763,7 +817,7 @@ function _buildIntentCitations(bk){
   if(!rh)return{total:0,uniqueDomains:0,domainTypes:[],contentTypes:[],topDomains:[],topListicles:fallbackListicles};
   var domainCounts={},contentCounts={},typeCounts={},total=0;
   (rh.prompts||[]).forEach(function(rp){
-    if(intentFilter!=='all'&&String(rp.intent||'').toUpperCase()!==intentFilter)return;
+    if(!_passesIntentTopic(rp.intent,rp.topic))return;
     (rp.entries||[]).forEach(function(e){
       if(activeModel!=='all'&&e.model!==activeModel)return;
       (e.srcs||[]).forEach(function(src){
@@ -797,7 +851,7 @@ function renderOverview(){
   var bk=BRAND_CFG[currentBrand].key;
   var pd=_filterPdByIntent(D.prompts[bk]);
   var s=D.sentiment[bk];
-  var comps=intentFilter!=='all'?_dedupeComps(_buildIntentFilteredComps(bk)):_dedupeComps(D.competitors[bk]);
+  var comps=(intentFilter!=='all'||topicFilter!=='all')?_dedupeComps(_buildIntentFilteredComps(bk)):_dedupeComps(D.competitors[bk]);
   var cit=D.citations[bk];
   var brandName=BRAND_CFG[currentBrand].name;
 
@@ -818,7 +872,7 @@ function renderOverview(){
   inRangeDates.forEach(function(d){dayTotals[d]=0;dayBrandHits[d]=0;top5comps.forEach(function(c){dayCompHits[c.name][d]=0;});});
   if(rh){
     rh.prompts.forEach(function(rp){
-      if(intentFilter!=='all'&&String(rp.intent||'').toUpperCase()!==intentFilter)return;
+      if(!_passesIntentTopic(rp.intent,rp.topic))return;
       rp.entries.filter(function(e){return inRangeDates.indexOf(e.date)>-1&&(activeModel==='all'||e.model===activeModel);}).forEach(function(e){
         dayTotals[e.date]=(dayTotals[e.date]||0)+1;
         if(e.hit)dayBrandHits[e.date]=(dayBrandHits[e.date]||0)+1;
@@ -1201,6 +1255,7 @@ function buildPromptExpandContent(pid){
     '</tr></thead><tbody>'+rows+'</tbody></table></div>';
 }
 function _intentBadge(it){if(!it)return '<span style="color:var(--ink4);font-size:11px">-</span>';var k=String(it).toUpperCase();var m={COMMERCIAL:['Commercial','#7c3aed'],TRANSACTIONAL:['Transactional','#16a34a'],INVESTIGATIONAL:['Investigational','#2563eb'],INFORMATIONAL:['Informational','#0891b2'],NAVIGATIONAL:['Navigational','#64748b'],BRANDED:['Branded','#d97706'],SENTIMENT:['Sentiment','#db2777']};var v=m[k]||[k.charAt(0)+k.slice(1).toLowerCase(),'#64748b'];return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;color:'+v[1]+';background:'+v[1]+'1a;white-space:nowrap">'+v[0]+'</span>';}
+function _topicBadge(t){if(!t)return '<span style="color:var(--ink4);font-size:11px">-</span>';return '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;color:var(--ink3);background:var(--surface2);white-space:nowrap">'+esc(t)+'</span>';}
 function renderPrompts(){
   var bk=BRAND_CFG[currentBrand].key;_pd=D.prompts[bk];_buildPromptComps(currentBrand);_buildPromptCitations(currentBrand);
   document.getElementById('promptsSub').textContent=_pd.length+' prompts tracked · '+(activeModel==='all'?'all models':(MODEL_META[activeModel]||{label:activeModel}).label);
@@ -1220,9 +1275,10 @@ function applyPromptFilter(){
     return !(p.models[activeModel]&&p.models[activeModel].mentioned);
   });
   if(intentFilter!=='all')data=data.filter(function(p){return String(p.intent||'').toUpperCase()===intentFilter;});
+  if(topicFilter!=='all')data=data.filter(function(p){return String(p.topic||'')===topicFilter;});
   data=sortPrompts(data);
   var tbody=document.getElementById('promptsTbody');
-  if(!data.length){tbody.innerHTML='<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--ink4)">No prompts match filter</td></tr>';return;}
+  if(!data.length){tbody.innerHTML='<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--ink4)">No prompts match filter</td></tr>';return;}
   tbody.innerHTML=data.map(function(p){
     /* visibility */
     var visBadge,mentionedModels;
@@ -1308,13 +1364,14 @@ function applyPromptFilter(){
       '</td>'+
       '<td><div class="pt-text">'+esc(p.text)+'</div></td>'+
       '<td>'+_intentBadge(p.intent)+'</td>'+
+      '<td>'+_topicBadge(p.topic)+'</td>'+
       '<td>'+visBadge+'</td><td>'+posBadge+'</td><td>'+sentBadge+'</td>'+
       '<td><div class="model-dots">'+dots+'</div></td>'+
       '<td><div class="comp-icons">'+compIcons+'</div></td>'+
       '<td><div class="comp-icons">'+citIcons+'</div></td>'+
     '</tr>'+
     '<tr id="exp-'+pid+'" style="display:none">'+
-      '<td colspan="9" style="padding:0 12px 0 36px;background:var(--surface)">'+
+      '<td colspan="10" style="padding:0 12px 0 36px;background:var(--surface)">'+
         '<div id="expContent-'+pid+'"></div>'+
       '</td>'+
     '</tr>';
@@ -1337,7 +1394,7 @@ function renderSentiment(){
   if(_sentIntentTexts)mentions=mentions.filter(function(m){return _sentIntentTexts.has(m.prompt);});
   if(activeModel!=='all')mentions=mentions.filter(function(m){return m.model===activeModel;});
   var tileCounts;
-  if(activeModel==='all'&&intentFilter==='all'){
+  if(activeModel==='all'&&intentFilter==='all'&&topicFilter==='all'){
     tileCounts={positive:s.positive||0,neutral:s.neutral||0,negative:s.negative||0,uncertain:s.uncertain||0};
   } else {
     tileCounts={positive:0,neutral:0,negative:0,uncertain:0};
@@ -1359,7 +1416,7 @@ function renderSentiment(){
 /* competitors */
 function renderCompetitors(){
   var bk=BRAND_CFG[currentBrand].key;
-  var comps=intentFilter!=='all'?_dedupeComps(_buildIntentFilteredComps(bk)):_dedupeComps(D.competitors[bk].slice());
+  var comps=(intentFilter!=='all'||topicFilter!=='all')?_dedupeComps(_buildIntentFilteredComps(bk)):_dedupeComps(D.competitors[bk].slice());
   if(activeModel!=='all')comps=comps.filter(function(c){return c.models&&c.models.indexOf(activeModel)>-1;});
   function _dc(c){return activeModel==='all'?c.mentions:(c.modelMentions&&c.modelMentions[activeModel]||0);}
   if(activeModel!=='all')comps=comps.slice().sort(function(a,b){return _dc(b)-_dc(a);});
@@ -1462,7 +1519,7 @@ function _buildCompCits(bk){
   // First pass: collect all citations per normalized comp key
   var normData={};
   (rh.prompts||[]).forEach(function(rp){
-    if(intentFilter!=='all'&&String(rp.intent||'').toUpperCase()!==intentFilter)return;
+    if(!_passesIntentTopic(rp.intent,rp.topic))return;
     (rp.entries||[]).filter(function(e){return ccInRange(e.date);}).forEach(function(e){
       if(!e.comps||!e.comps.length||!e.srcs||!e.srcs.length)return;
       e.comps.forEach(function(c){
@@ -1506,7 +1563,7 @@ function _buildBrandCits(bk){
   function inRange(d){if(!d)return true;if(lastRunOnly)return d===maxDate;if(endDate)return d>=cutoff&&d<=endDate;if(cutoff)return d>=cutoff;return true;}
   var urlMap={};
   (rh.prompts||[]).forEach(function(rp){
-    if(intentFilter!=='all'&&String(rp.intent||'').toUpperCase()!==intentFilter)return;
+    if(!_passesIntentTopic(rp.intent,rp.topic))return;
     (rp.entries||[]).forEach(function(e){
       if(!e.hit||!e.srcs||!e.srcs.length)return;
       if(!inRange(e.date))return;
@@ -1524,7 +1581,7 @@ function _barRows(items,total){return items.map(function(x){var pct=total>0?(x.c
 function renderCitations(){
   var bk=BRAND_CFG[currentBrand].key,c;
   /* base citation data */
-  if(intentFilter!=='all'){
+  if(intentFilter!=='all'||topicFilter!=='all'){
     c=_buildIntentCitations(bk);
   } else if(activeModel!=='all'&&D.modelCitations&&D.modelCitations[bk]&&D.modelCitations[bk][activeModel]){
     c=Object.assign({},D.modelCitations[bk][activeModel]);
@@ -1618,7 +1675,7 @@ function renderCitations(){
       '<div class="cc"><div class="cc-head"><div class="cc-title">Page Type</div><div class="cc-sub">'+tdt.toLocaleString()+' total citations</div></div><div class="cc-body">'+dtBars+'</div></div>'+
       '<div class="cc"><div class="cc-head"><div class="cc-title">Content Type</div><div class="cc-sub">how AI sources are classified</div></div><div class="cc-body">'+ctBars+'</div></div>'+
     '</div>'+
-    '<div class="cc"><div class="cc-head"><div class="cc-title">Top 20 Cited Domains</div><div class="cc-sub">'+(c.uniqueDomains||'')+' unique domains'+(activeModel!=='all'?' for '+(MODEL_META[activeModel]||{label:activeModel}).label:'')+(intentFilter!=='all'?' &middot; '+_intentLabel(intentFilter)+' intent':'')+'</div></div>'+
+    '<div class="cc"><div class="cc-head"><div class="cc-title">Top 20 Cited Domains</div><div class="cc-sub">'+(c.uniqueDomains||'')+' unique domains'+(activeModel!=='all'?' for '+(MODEL_META[activeModel]||{label:activeModel}).label:'')+(intentFilter!=='all'?' &middot; '+_intentLabel(intentFilter)+' intent':'')+(topicFilter!=='all'?' &middot; '+esc(topicFilter)+' topic':'')+'</div></div>'+
       '<div class="cc-body np"><table class="dom-table"><thead><tr><th>#</th><th>Domain</th><th>Domain Type</th><th style="text-align:right">Citations</th></tr></thead><tbody>'+domRows+'</tbody></table></div>'+
     '</div>'+
     (ltRows?'<div class="cc"><div class="cc-head"><div class="cc-title">Top Listicle Articles</div><div class="cc-sub">highest-priority inclusion targets</div></div><div class="cc-body np"><table class="dom-table"><thead><tr><th>Domain</th><th>Article</th><th style="text-align:right">Cited</th></tr></thead><tbody>'+ltRows+'</tbody></table></div></div>':'');
@@ -1656,6 +1713,7 @@ function renderActionsGrid(){
   }).join('');
 }
 function toggleAct(id){var card=document.getElementById(id);var wasCollapsed=card.classList.contains('collapsed');document.querySelectorAll('.act-card').forEach(function(c){c.classList.add('collapsed');});if(wasCollapsed)card.classList.remove('collapsed');}
+_rebuildTopicMenu();
 _applyTimeRange();
 renderAll();
 </script>

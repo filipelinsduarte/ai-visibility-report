@@ -700,6 +700,7 @@ def process_brand_data(api_key, brand_cfg, llm_cfg=None):
         prompt_id = p.get("id") or p.get("promptId")
         prompt_text = p.get("promptText") or p.get("text") or ""
         search_intent = p.get("searchIntent") or infer_intent(p.get("promptText") or p.get("text") or "")
+        topic = p.get("category") or ""
 
         detail = details_map.get(p_idx, p)
 
@@ -835,6 +836,7 @@ def process_brand_data(api_key, brand_cfg, llm_cfg=None):
             "id": prompt_id,
             "text": prompt_text,
             "intent": search_intent,
+            "topic": topic,
             "entries": raw_entries,
         })
 
@@ -842,6 +844,7 @@ def process_brand_data(api_key, brand_cfg, llm_cfg=None):
             "id": prompt_id,
             "text": prompt_text,
             "intent": search_intent,
+            "topic": topic,
             "avgScore": avg_score,
             "bestScore": best_score,
             "mentions": mentions_count,
